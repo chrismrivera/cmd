@@ -57,28 +57,26 @@ func (cmd *Command) Flag(name string) string {
 	return cmd.Flags.Lookup(name).Value.String()
 }
 
-func (cmd *Command) FlagUint(name string) uint {
+func (cmd *Command) FlagUint(name string) (uint, error) {
 	val := cmd.Flag(name)
 
 	i, err := strconv.ParseUint(val, 10, 32)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		cmd.Usage()
+		return uint(0), err
 	}
 
-	return uint(i)
+	return uint(i), nil
 }
 
-func (cmd *Command) FlagInt64(name string) int64 {
+func (cmd *Command) FlagInt64(name string) (int64, error) {
 	val := cmd.Flag(name)
 
 	i, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		cmd.Usage()
+		return 0, err
 	}
 
-	return i
+	return i, nil
 }
 
 func (cmd *Command) FlagBool(name string) bool {
@@ -96,16 +94,15 @@ func (cmd *Command) Arg(name string) string {
 	return ""
 }
 
-func (cmd *Command) ArgInt64(name string) int64 {
+func (cmd *Command) ArgInt64(name string) (int64, error) {
 	val := cmd.Arg(name)
 
 	i, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		cmd.Usage()
+		return 0, err
 	}
 
-	return i
+	return i, nil
 }
 
 func (cmd *Command) Usage() {
