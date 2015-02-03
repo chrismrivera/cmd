@@ -8,6 +8,32 @@ import (
 	"strconv"
 )
 
+type UsageErr struct {
+	errMsg    string
+	showUsage func()
+}
+
+func (ue *UsageErr) Error() string {
+	return ue.errMsg
+}
+
+func (ue *UsageErr) ShowUsage() {
+	fmt.Println(ue.errMsg)
+	fmt.Println()
+
+	if ue.showUsage != nil {
+		ue.showUsage()
+	}
+}
+
+func newUsageErr(msg string, f func()) *UsageErr {
+	if msg == "" {
+		msg = "Invalid usage"
+	}
+
+	return &UsageErr{errMsg: msg, showUsage: f}
+}
+
 type CommandSetupFunc func(cmd *Command)
 type CommandRunFunc func(cmd *Command) error
 
@@ -140,8 +166,6 @@ func (cmd *Command) Usage() {
 	if fc > 0 {
 		fmt.Printf(flagsStr)
 	}
-
-	os.Exit(0)
 }
 
 type Commander struct {
@@ -159,24 +183,24 @@ func (cmdr *Commander) AddCommand(cmd *Command) {
 
 func (cmdr *Commander) Run(args []string) error {
 	if len(args) < 2 {
-		cmdr.Usage()
+		return newUsageErr("No command given", cmdr.Usage)
 	}
 
 	cmd, ok := cmdr.Commands[args[1]]
 	if !ok {
-		cmdr.Usage()
+		return newUsageErr("Invalid command", cmdr.Usage)
 	}
 
 	for _, arg := range args[2:] {
 		if arg == "--help" {
-			cmd.Usage()
+			return newUsageErr("", cmd.Usage)
 		}
 	}
 
 	cmd.Flags.Parse(args[2:])
 
 	if len(cmd.Flags.Args()) != len(cmd.Args) {
-		cmd.Usage()
+		return newUsageErr("Wrong number of command arguments", cmd.Usage)
 	}
 
 	return cmd.Run(cmd)
@@ -209,5 +233,4 @@ func (cmdr *Commander) Usage() {
 	}
 
 	fmt.Println()
-	os.Exit(0)
 }
