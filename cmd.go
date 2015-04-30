@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 type UsageErr struct {
@@ -47,6 +48,7 @@ type Command struct {
 	Description string
 	Group       string
 	Args        []*CommandArg
+	EnvArgs     map[string]string
 	Flags       *flag.FlagSet
 	Setup       CommandSetupFunc
 	Run         CommandRunFunc
@@ -59,6 +61,7 @@ func NewCommand(name, group, desc string, setup CommandSetupFunc, run CommandRun
 		Group:       group,
 		Flags:       flag.NewFlagSet(name, flag.ExitOnError),
 		Args:        []*CommandArg{},
+		EnvArgs:     map[string]string{},
 	}
 
 	cmd.Setup = setup
@@ -73,6 +76,10 @@ func (cmd *Command) AddFlag(name, defaultValue, desc string) {
 
 func (cmd *Command) AddFlagBool(name string, defaultValue bool, desc string) {
 	cmd.Flags.Bool(name, defaultValue, desc)
+}
+
+func (cmd *Command) AddEnvArg(name, desc string) {
+	cmd.EnvArgs[name] = desc
 }
 
 func (cmd *Command) AppendArg(name, desc string) {
@@ -131,6 +138,10 @@ func (cmd *Command) ArgInt64(name string) (int64, error) {
 	return i, nil
 }
 
+func (cmd *Command) EnvArg(name string) string {
+	return strings.TrimSpace(os.Getenv(name))
+}
+
 func (cmd *Command) Usage() {
 	usageStr := ""
 	cmdDesc := ""
@@ -159,12 +170,20 @@ func (cmd *Command) Usage() {
 	fmt.Printf("%s\n\n", cmd.Description)
 
 	if len(cmd.Args) > 0 {
-		fmt.Printf("Command Arguments:\n")
-		fmt.Printf("%s\n", cmdDesc)
+		fmt.Println("Command Arguments:")
+		fmt.Println(cmdDesc)
 	}
 
 	if fc > 0 {
-		fmt.Printf(flagsStr)
+		fmt.Println(flagsStr)
+	}
+
+	if len(cmd.EnvArgs) > 0 {
+		fmt.Println("Required environment variables:")
+
+		for n, d := range cmd.EnvArgs {
+			fmt.Printf("    %s: %s\n", n, d)
+		}
 	}
 }
 
@@ -201,6 +220,14 @@ func (cmdr *Commander) Run(args []string) error {
 
 	if len(cmd.Flags.Args()) != len(cmd.Args) {
 		return newUsageErr("Wrong number of command arguments", cmd.Usage)
+	}
+
+	if len(cmd.EnvArgs) > 0 {
+		for n, _ := range cmd.EnvArgs {
+			if cmd.EnvArg(n) == "" {
+				return newUsageErr(fmt.Sprintf("Environment variable %s is unset", n), cmd.Usage)
+			}
+		}
 	}
 
 	return cmd.Run(cmd)
