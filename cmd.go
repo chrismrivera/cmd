@@ -35,32 +35,34 @@ func newUsageErr(msg string, f func()) *UsageErr {
 	return &UsageErr{errMsg: msg, showUsage: f}
 }
 
-type CommandSetupFunc func(cmd *Command)
-type CommandRunFunc func(cmd *Command) error
+type SetupFunc func(cmd *Command)
+type RunFunc func(cmd *Command) error
 
-type CommandArg struct {
+type Arg struct {
 	Name        string
 	Description string
 }
 
 type Command struct {
-	Name        string
-	Description string
-	Group       string
-	Args        []*CommandArg
-	EnvArgs     map[string]string
-	Flags       *flag.FlagSet
-	Setup       CommandSetupFunc
-	Run         CommandRunFunc
+	Name           string
+	Description    string
+	Group          string
+	ExampleUsage   string
+	Args           []*Arg
+	EnvArgs        map[string]string
+	Flags          *flag.FlagSet
+	AcceptsVarArgs bool
+	Setup          SetupFunc
+	Run            RunFunc
 }
 
-func NewCommand(name, group, desc string, setup CommandSetupFunc, run CommandRunFunc) *Command {
+func NewCommand(name, group, desc string, setup SetupFunc, run RunFunc) *Command {
 	cmd := &Command{
 		Name:        name,
 		Description: desc,
 		Group:       group,
 		Flags:       flag.NewFlagSet(name, flag.ExitOnError),
-		Args:        []*CommandArg{},
+		Args:        []*Arg{},
 		EnvArgs:     map[string]string{},
 	}
 
@@ -83,7 +85,7 @@ func (cmd *Command) AddEnvArg(name, desc string) {
 }
 
 func (cmd *Command) AppendArg(name, desc string) {
-	cmd.Args = append(cmd.Args, &CommandArg{name, desc})
+	cmd.Args = append(cmd.Args, &Arg{name, desc})
 }
 
 func (cmd *Command) Flag(name string) string {
@@ -142,6 +144,10 @@ func (cmd *Command) EnvArg(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
 
+func (cmd *Command) VarArgs() []string {
+	return cmd.Flags.Args()
+}
+
 func (cmd *Command) Usage() {
 	usageStr := ""
 	cmdDesc := ""
@@ -155,7 +161,7 @@ func (cmd *Command) Usage() {
 	flagsStr := "Flags:\n"
 
 	visitFunc := func(flag *flag.Flag) {
-		flagsStr += fmt.Sprintf("    --%s: %s\n", flag.Name, flag.Usage)
+		flagsStr += fmt.Sprintf("    %s: %s\n", flag.Name, flag.Usage)
 		fc++
 	}
 
@@ -167,6 +173,11 @@ func (cmd *Command) Usage() {
 	}
 
 	fmt.Printf("usage: %s %s%s %s\n\n", os.Args[0], cmd.Name, usageflagStr, usageStr)
+
+	if cmd.ExampleUsage != "" {
+		fmt.Printf("example: %s\n\n", cmd.ExampleUsage)
+	}
+
 	fmt.Printf("%s\n\n", cmd.Description)
 
 	if len(cmd.Args) > 0 {
@@ -218,7 +229,7 @@ func (cmdr *Commander) Run(args []string) error {
 
 	cmd.Flags.Parse(args[2:])
 
-	if len(cmd.Flags.Args()) != len(cmd.Args) {
+	if !cmd.AcceptsVarArgs && len(cmd.Flags.Args()) != len(cmd.Args) {
 		return newUsageErr("Wrong number of command arguments", cmd.Usage)
 	}
 
