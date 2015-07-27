@@ -140,6 +140,10 @@ func (cmd *Command) ArgInt64(name string) (int64, error) {
 	return i, nil
 }
 
+func (cmd *Command) ArgBool(name string) (bool, error) {
+	return strconv.ParseBool(cmd.Arg(name))
+}
+
 func (cmd *Command) EnvArg(name string) string {
 	return strings.TrimSpace(os.Getenv(name))
 }
