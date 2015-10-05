@@ -41,19 +41,18 @@ type RunFunc func(cmd *Command) error
 type Arg struct {
 	Name        string
 	Description string
+	Variable    bool
 }
 
 type Command struct {
-	Name           string
-	Description    string
-	Group          string
-	ExampleUsage   string
-	Args           []*Arg
-	EnvArgs        map[string]string
-	Flags          *flag.FlagSet
-	AcceptsVarArgs bool
-	Setup          SetupFunc
-	Run            RunFunc
+	Name        string
+	Description string
+	Group       string
+	Args        []*Arg
+	EnvArgs     map[string]string
+	Flags       *flag.FlagSet
+	Setup       SetupFunc
+	Run         RunFunc
 }
 
 func NewCommand(name, group, desc string, setup SetupFunc, run RunFunc) *Command {
@@ -85,7 +84,11 @@ func (cmd *Command) AddEnvArg(name, desc string) {
 }
 
 func (cmd *Command) AppendArg(name, desc string) {
-	cmd.Args = append(cmd.Args, &Arg{name, desc})
+	cmd.Args = append(cmd.Args, &Arg{name, desc, false})
+}
+
+func (cmd *Command) AppendVarArg(name, desc string) {
+	cmd.Args = append(cmd.Args, &Arg{name, desc, true})
 }
 
 func (cmd *Command) Flag(name string) string {
@@ -149,7 +152,7 @@ func (cmd *Command) EnvArg(name string) string {
 }
 
 func (cmd *Command) VarArgs() []string {
-	return cmd.Flags.Args()
+	return cmd.Flags.Args()[len(cmd.Args)-1:]
 }
 
 func (cmd *Command) Usage() {
@@ -157,8 +160,13 @@ func (cmd *Command) Usage() {
 	cmdDesc := ""
 
 	for _, a := range cmd.Args {
-		usageStr += a.Name + " "
-		cmdDesc += fmt.Sprintf("    %s: %s\n", a.Name, a.Description)
+		if a.Variable {
+			usageStr += a.Name + "... "
+			cmdDesc += fmt.Sprintf("    %s[...]: %s\n", a.Name, a.Description)
+		} else {
+			usageStr += a.Name + " "
+			cmdDesc += fmt.Sprintf("    %s: %s\n", a.Name, a.Description)
+		}
 	}
 
 	fc := 0
@@ -177,10 +185,6 @@ func (cmd *Command) Usage() {
 	}
 
 	fmt.Printf("usage: %s %s%s %s\n\n", os.Args[0], cmd.Name, usageflagStr, usageStr)
-
-	if cmd.ExampleUsage != "" {
-		fmt.Printf("example: %s\n\n", cmd.ExampleUsage)
-	}
 
 	fmt.Printf("%s\n\n", cmd.Description)
 
@@ -233,7 +237,17 @@ func (cmdr *Commander) Run(args []string) error {
 
 	cmd.Flags.Parse(args[2:])
 
-	if !cmd.AcceptsVarArgs && len(cmd.Flags.Args()) != len(cmd.Args) {
+	varArgs := false
+	for _, arg := range cmd.Args {
+		if arg.Variable {
+			varArgs = true
+			break
+		}
+	}
+
+	if !varArgs && len(cmd.Flags.Args()) != len(cmd.Args) {
+		return newUsageErr("Wrong number of command arguments", cmd.Usage)
+	} else if varArgs && len(cmd.Flags.Args()) < len(cmd.Args) {
 		return newUsageErr("Wrong number of command arguments", cmd.Usage)
 	}
 
