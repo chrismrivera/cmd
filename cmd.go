@@ -206,32 +206,41 @@ func (cmd *Command) Usage() {
 	}
 }
 
-type Commander struct {
-	Commands map[string]*Command
+type App struct {
+	Commands    map[string]*Command
+	Description string
 }
 
-func NewCommander() *Commander {
-	return &Commander{make(map[string]*Command)}
+func NewApp() *App {
+	return &App{
+		Commands: make(map[string]*Command),
+	}
 }
 
-func (cmdr *Commander) AddCommand(cmd *Command) {
-	cmdr.Commands[cmd.Name] = cmd
+func (app *App) AddCommand(cmd *Command) {
+	app.Commands[cmd.Name] = cmd
 	cmd.Setup(cmd)
 }
 
-func (cmdr *Commander) Run(args []string) error {
+func (app *App) Run(args []string) error {
 	if len(args) < 2 {
-		return newUsageErr("No command given", cmdr.Usage)
+		return newUsageErr("No command given", app.Usage)
 	}
 
-	cmd, ok := cmdr.Commands[args[1]]
+	if args[1] == "--help" {
+		app.Usage()
+		return nil
+	}
+
+	cmd, ok := app.Commands[args[1]]
 	if !ok {
-		return newUsageErr("Invalid command", cmdr.Usage)
+		return newUsageErr("Invalid command", app.Usage)
 	}
 
 	for _, arg := range args[2:] {
 		if arg == "--help" {
-			return newUsageErr("", cmd.Usage)
+			cmd.Usage()
+			return nil
 		}
 	}
 
@@ -262,12 +271,17 @@ func (cmdr *Commander) Run(args []string) error {
 	return cmd.Run(cmd)
 }
 
-func (cmdr *Commander) Usage() {
+func (app *App) Usage() {
 	fmt.Printf("usage: %s cmd [cmd-flags] [cmd-args]\n", os.Args[0])
+
+	if app.Description != "" {
+		fmt.Println()
+		fmt.Println(app.Description)
+	}
 
 	var groupNames sort.StringSlice
 	cmdNamesByGroup := map[string]sort.StringSlice{}
-	for _, cmd := range cmdr.Commands {
+	for _, cmd := range app.Commands {
 		if _, ok := cmdNamesByGroup[cmd.Group]; !ok {
 			groupNames = append(groupNames, cmd.Group)
 		}
@@ -283,7 +297,7 @@ func (cmdr *Commander) Usage() {
 		cmdNamesByGroup[gn].Sort()
 
 		for _, cn := range cmdNamesByGroup[gn] {
-			cmd := cmdr.Commands[cn]
+			cmd := app.Commands[cn]
 			fmt.Printf("    %-18s %s\n", cmd.Name, cmd.Description)
 		}
 	}
