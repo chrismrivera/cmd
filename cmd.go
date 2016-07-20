@@ -9,40 +9,37 @@ import (
 	"strings"
 )
 
-type UsageErr struct {
-	errMsg    string
-	showUsage func()
-}
-
-func (ue *UsageErr) Error() string {
-	return ue.errMsg
-}
-
-func (ue *UsageErr) ShowUsage() {
-	fmt.Println(ue.errMsg)
-	fmt.Println()
-
-	if ue.showUsage != nil {
-		ue.showUsage()
-	}
-}
-
-func newUsageErr(msg string, f func()) *UsageErr {
-	if msg == "" {
-		msg = "Invalid usage"
-	}
-
-	return &UsageErr{errMsg: msg, showUsage: f}
-}
-
-type SetupFunc func(cmd *Command)
-type RunFunc func(cmd *Command) error
-
 type Arg struct {
 	Name        string
 	Description string
 	Variable    bool
 }
+
+type Value string
+
+func (v Value) String() string {
+	return string(v)
+}
+
+func (v Value) Bool() (bool, error) {
+	return strconv.ParseBool(string(v))
+}
+
+func (v Value) Int() (int, error) {
+	i, err := strconv.ParseInt(string(v), 10, 32)
+	return int(i), err
+}
+
+func (v Value) Int64() (int64, error) {
+	return strconv.ParseInt(string(v), 10, 64)
+}
+
+func (v Value) Uint64() (uint64, error) {
+	return strconv.ParseUint(string(v), 10, 64)
+}
+
+type SetupFunc func(cmd *Command)
+type RunFunc func(cmd *Command) error
 
 type Command struct {
 	Name        string
@@ -71,6 +68,14 @@ func NewCommand(name, group, desc string, setup SetupFunc, run RunFunc) *Command
 	return cmd
 }
 
+func (cmd *Command) AppendArg(name, desc string) {
+	cmd.Args = append(cmd.Args, &Arg{name, desc, false})
+}
+
+func (cmd *Command) AppendVarArg(name, desc string) {
+	cmd.Args = append(cmd.Args, &Arg{name, desc, true})
+}
+
 func (cmd *Command) AddFlag(name, defaultValue, desc string) {
 	cmd.Flags.String(name, defaultValue, desc)
 }
@@ -83,76 +88,60 @@ func (cmd *Command) AddEnvArg(name, desc string) {
 	cmd.EnvArgs[name] = desc
 }
 
-func (cmd *Command) AppendArg(name, desc string) {
-	cmd.Args = append(cmd.Args, &Arg{name, desc, false})
-}
-
-func (cmd *Command) AppendVarArg(name, desc string) {
-	cmd.Args = append(cmd.Args, &Arg{name, desc, true})
-}
-
-func (cmd *Command) Flag(name string) string {
-	return cmd.Flags.Lookup(name).Value.String()
-}
-
-func (cmd *Command) FlagUint(name string) (uint, error) {
-	val := cmd.Flag(name)
-
-	i, err := strconv.ParseUint(val, 10, 32)
-	if err != nil {
-		return uint(0), err
-	}
-
-	return uint(i), nil
-}
-
-func (cmd *Command) FlagInt64(name string) (int64, error) {
-	val := cmd.Flag(name)
-
-	i, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-
-	return i, nil
-}
-
-func (cmd *Command) FlagBool(name string) bool {
-	f := cmd.Flags.Lookup(name)
-	return f.Value.(flag.Getter).Get().(bool)
-}
-
-func (cmd *Command) Arg(name string) string {
+func (cmd *Command) Arg(name string) Value {
 	for i, ca := range cmd.Args {
 		if ca.Name == name {
-			return cmd.Flags.Arg(i)
+			return Value(cmd.Flags.Arg(i))
 		}
 	}
 
 	return ""
 }
 
-func (cmd *Command) ArgInt64(name string) (int64, error) {
-	val := cmd.Arg(name)
+func (cmd *Command) EnvArg(name string) Value {
+	return Value(strings.TrimSpace(os.Getenv(name)))
+}
 
-	i, err := strconv.ParseInt(val, 10, 64)
-	if err != nil {
-		return 0, err
+func (cmd *Command) VarArgs() []Value {
+	ret := []Value{}
+
+	for _, a := range cmd.Flags.Args()[len(cmd.Args)-1:] {
+		ret = append(ret, Value(a))
 	}
 
-	return i, nil
+	return ret
 }
 
-func (cmd *Command) ArgBool(name string) (bool, error) {
-	return strconv.ParseBool(cmd.Arg(name))
+func (cmd *Command) Flag(name string) Value {
+	return Value(cmd.Flags.Lookup(name).Value.String())
 }
 
-func (cmd *Command) EnvArg(name string) string {
-	return strings.TrimSpace(os.Getenv(name))
-}
+func (cmd *Command) Parse(args []string) error {
+	cmd.Flags.Parse(args)
 
-func (cmd *Command) VarArgs() []string {
-	return cmd.Flags.Args()[len(cmd.Args)-1:]
+	varArgs := false
+	for _, arg := range cmd.Args {
+		if arg.Variable {
+			varArgs = true
+			break
+		}
+	}
+
+	if !varArgs && len(cmd.Flags.Args()) != len(cmd.Args) {
+		return newUsageErr("Wrong number of command arguments", cmd.Usage)
+	} else if varArgs && len(cmd.Flags.Args()) < len(cmd.Args) {
+		return newUsageErr("Wrong number of command arguments", cmd.Usage)
+	}
+
+	if len(cmd.EnvArgs) > 0 {
+		for n := range cmd.EnvArgs {
+			if cmd.EnvArg(n) == "" {
+				return newUsageErr(fmt.Sprintf("Environment variable %s is unset", n), cmd.Usage)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (cmd *Command) Usage() {
@@ -206,6 +195,32 @@ func (cmd *Command) Usage() {
 	}
 }
 
+type UsageErr struct {
+	errMsg    string
+	showUsage func()
+}
+
+func (ue *UsageErr) Error() string {
+	return ue.errMsg
+}
+
+func (ue *UsageErr) ShowUsage() {
+	fmt.Println(ue.errMsg)
+	fmt.Println()
+
+	if ue.showUsage != nil {
+		ue.showUsage()
+	}
+}
+
+func newUsageErr(msg string, f func()) *UsageErr {
+	if msg == "" {
+		msg = "Invalid usage"
+	}
+
+	return &UsageErr{errMsg: msg, showUsage: f}
+}
+
 type App struct {
 	Commands    map[string]*Command
 	Description string
@@ -244,28 +259,8 @@ func (app *App) Run(args []string) error {
 		}
 	}
 
-	cmd.Flags.Parse(args[2:])
-
-	varArgs := false
-	for _, arg := range cmd.Args {
-		if arg.Variable {
-			varArgs = true
-			break
-		}
-	}
-
-	if !varArgs && len(cmd.Flags.Args()) != len(cmd.Args) {
-		return newUsageErr("Wrong number of command arguments", cmd.Usage)
-	} else if varArgs && len(cmd.Flags.Args()) < len(cmd.Args) {
-		return newUsageErr("Wrong number of command arguments", cmd.Usage)
-	}
-
-	if len(cmd.EnvArgs) > 0 {
-		for n, _ := range cmd.EnvArgs {
-			if cmd.EnvArg(n) == "" {
-				return newUsageErr(fmt.Sprintf("Environment variable %s is unset", n), cmd.Usage)
-			}
-		}
+	if err := cmd.Parse(args[2:]); err != nil {
+		return err
 	}
 
 	return cmd.Run(cmd)
