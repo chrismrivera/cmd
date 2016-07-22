@@ -76,14 +76,6 @@ func (cmd *Command) AppendVarArg(name, desc string) {
 	cmd.Args = append(cmd.Args, &Arg{name, desc, true})
 }
 
-func (cmd *Command) AddFlag(name, defaultValue, desc string) {
-	cmd.Flags.String(name, defaultValue, desc)
-}
-
-func (cmd *Command) AddFlagBool(name string, defaultValue bool, desc string) {
-	cmd.Flags.Bool(name, defaultValue, desc)
-}
-
 func (cmd *Command) AddEnvArg(name, desc string) {
 	cmd.EnvArgs[name] = desc
 }

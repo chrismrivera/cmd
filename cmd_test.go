@@ -108,7 +108,7 @@ func TestCmdArgs(t *testing.T) {
 func TestCmdFlags(t *testing.T) {
 	// String flag
 	c := NewCommand("test", "test-group", "does test stuff", nil, nil)
-	c.AddFlag("flag", "default", "description")
+	c.Flags.String("flag", "default", "description")
 
 	if err := c.Parse([]string{"--flag", "trump"}); err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ func TestCmdFlags(t *testing.T) {
 
 	// String flag with default value
 	c = NewCommand("test", "test-group", "does test stuff", nil, nil)
-	c.AddFlag("flag", "default", "description")
+	c.Flags.String("flag", "default", "description")
 
 	if err := c.Parse([]string{}); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestCmdFlags(t *testing.T) {
 
 	// Int flag
 	c = NewCommand("test", "test-group", "does test stuff", nil, nil)
-	c.AddFlag("flag", "12", "description")
+	c.Flags.Int("flag", 12, "description")
 
 	if err := c.Parse([]string{"--flag", "20"}); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestCmdFlags(t *testing.T) {
 
 	// Int flag with default value
 	c = NewCommand("test", "test-group", "does test stuff", nil, nil)
-	c.AddFlag("flag", "12", "description")
+	c.Flags.Int("flag", 12, "description")
 
 	if err := c.Parse([]string{}); err != nil {
 		t.Fatal(err)
@@ -166,7 +166,7 @@ func TestCmdFlags(t *testing.T) {
 
 	// Bool flag
 	c = NewCommand("test", "test-group", "does test stuff", nil, nil)
-	c.AddFlagBool("flag", false, "description")
+	c.Flags.Bool("flag", false, "description")
 
 	if err := c.Parse([]string{"--flag"}); err != nil {
 		t.Fatal(err)
